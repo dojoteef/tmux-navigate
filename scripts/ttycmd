@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+
+CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPTS_DIR="$CURRENT_DIR"
+HELPERS_DIR="$SCRIPTS_DIR/helpers"
+
+source "$HELPERS_DIR/format_utils.sh"
+
+########################
+# Utilities
+########################
+escape_level=1
+function esc() {
+  local escapes=0
+  while [ $escapes -lt $escape_level ]; do
+    echo -ne '\e'
+    escapes=$(($escapes+1))
+  done
+}
+
+########################
+# Escape Sequences
+########################
+# Save Cursor
+# http://www.vt100.net/docs/vt510-rm/DECSC.html
+function decsc() {
+  esc && echo -ne '7'
+}
+
+# Restore Cursor
+# http://www.vt100.net/docs/vt510-rm/DECRC.html
+function decrc() {
+  esc && echo -ne '8'
+}
+
+########################
+# Control Sequences
+########################
+# Control Sequence Introducer
+# http://www.vt100.net/docs/vt510-rm/chapter4.html#S4.3.3
+function csi_start() {
+  esc && echo -ne '['
+}
+
+# Cursor forward
+# http://www.vt100.net/docs/vt510-rm/CUF.html
+function cuf() {
+  csi_start && echo -ne "$1C"
+}
+
+# Cursor backward
+# http://www.vt100.net/docs/vt510-rm/CUF.html
+function cub() {
+  csi_start && echo -ne "$1D"
+}
+
+# Cursor position
+# http://www.vt100.net/docs/vt510-rm/CUP.html
+function cup() {
+  csi_start && echo -ne "$1;$2H"
+}
+
+########################
+# Device Control Strings
+########################
+# DCS Start
+# http://www.vt100.net/docs/vt510-rm/chapter4.html#S4.3.4
+function dcs_start() {
+  esc && echo -ne 'P'
+}
+
+# DCS Terminator
+# http://www.vt100.net/docs/vt510-rm/chapter4.html#S4.3.4
+function dcs_end() {
+  esc && echo -ne '\'
+}
+
+# tmux prefix
+# https://github.com/tmux/tmux/blob/1fd6ca2260/input.c#L1791-L1793
+function dcs_prefix() {
+  echo -ne 'tmux;'
+}
+
+# The only dcs cmd tmux defines is a raw string print
+# https://github.com/tmux/tmux/blob/1fd6ca2260/input.c#L1801-L1806
+function dcs_cmd() {
+  local cmd="$1"
+  shift
+
+  dcs_start
+  dcs_prefix
+  escape_level=2
+  $cmd "$@"
+  escape_level=1
+  dcs_end
+}
+
+cmd="$1"
+shift
+
+$cmd "$@" > $(pane_tty)

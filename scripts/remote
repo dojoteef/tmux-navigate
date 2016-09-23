@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+
+CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPTS_DIR="$CURRENT_DIR"
+HELPERS_DIR="$SCRIPTS_DIR/helpers"
+
+source "$HELPERS_DIR/logging_utils.sh"
+source "$HELPERS_DIR/ps_utils.sh"
+source "$HELPERS_DIR/tmux_utils.sh"
+source "$HELPERS_DIR/utils.sh"
+
+function set_navigation_state() {
+  local next_state="$1"
+  if [[ "$navigation_state" == "$next_state" ]]; then
+    return
+  fi
+
+  log_debug "Next navigation state: $next_state"
+  tmux set-option -gq @navigation-state "$next_state"
+
+  case $(navigation_state) in
+    navigating)
+      save_state
+      tmux switch-client -Tnavigation
+      cursor_move
+      ;;
+    idle)
+      restore_state
+      ;;
+    *)
+      ;;
+  esac
+}
+
+function save_state() {
+  local paste_time=$(tmux show-options -gqv assume-paste-time)
+  if [[ "$paste_time" ]]; then
+    log_debug "Saving remote state"
+    tmux set-option -gq @navigation-paste-time "$paste_time"
+    tmux set-option -gq assume-paste-time 0
+    "$SCRIPTS_DIR/ttycmd" decsc
+  fi
+}
+
+function restore_state() {
+  local paste_time=$(tmux show-options -gqv @navigation-paste-time)
+  if [[ "$paste_time" ]]; then
+    log_debug "Restoring remote state"
+    tmux set-option -gq assume-paste-time $paste_time
+    tmux set-option -gq @navigation-paste-time ""
+    tmux set-option -gq @navigation-offset ""
+    "$SCRIPTS_DIR/ttycmd" decrc
+  fi
+}
+
+function cursor_move() {
+  local x width
+  x=$(pane_cursor_x)
+  width=$(pane_width)
+
+  if [[ $(($x + 1)) -eq $width ]]; then
+    log_debug "Moving cursor backward"
+    "$SCRIPTS_DIR/ttycmd" cub
+  else
+    log_debug "Moving cursor forward"
+    "$SCRIPTS_DIR/ttycmd" cuf
+  fi
+}
+
+function offset() {
+  tmux show-options -gqv @navigation-offset
+}
+
+function update_offset() {
+  tmux set-option -g @navigation-offset "$(offset)$1"
+}
+
+function execute_cmd() {
+  local after cmd cursor offset
+
+  cmd="$1"
+  shift
+
+  log_debug "Executing remote cmd: $cmd"
+  log_debug "Current navigation state: $(navigation_state), key-table: $(client_key_table)"
+
+  case $cmd in
+    begin)
+      if [[ "$(navigation_state)" == "idle" ]]; then
+        set_navigation_state "navigating"
+      fi
+      ;;
+    receive)
+      if [[ "$(navigation_state)" == "navigating" ]]; then
+        update_offset $1
+      fi
+      ;;
+    reset)
+      if [[ "$(navigation_state)" != "idle" ]]; then
+        set_navigation_state "idle"
+      fi
+
+      if [[ "$1" == "all" ]] && requires_remote_delay; then
+        tmux send-prefix
+        send_keys C-q
+      fi
+      ;;
+    navigate-editor)
+      if [[ "$(navigation_state)" == "navigating" ]]; then
+        restore_state
+        if is_running_editor; then
+          cursor=$(window_cursor_pos)
+          send_keys $(select_key $1)
+
+          if [[ "$cursor" != "$(issue_delay)" ]]; then
+            set_navigation_state "idle"
+          fi
+        fi
+      fi
+      ;;
+    navigate)
+      if [[ "$(navigation_state)" == "navigating" ]]; then
+        "$SCRIPTS_DIR/select_pane" remote $1 $(offset)
+        restore_state
+        set_navigation_state "idle"
+      fi
+      ;;
+  esac
+}
+
+execute_cmd "$@"

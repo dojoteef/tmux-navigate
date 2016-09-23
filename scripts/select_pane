@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+
+CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPTS_DIR="$CURRENT_DIR"
+HELPERS_DIR="$SCRIPTS_DIR/helpers"
+
+source "$HELPERS_DIR/logging_utils.sh"
+source "$HELPERS_DIR/format_utils.sh"
+source "$HELPERS_DIR/ps_utils.sh"
+source "$HELPERS_DIR/utils.sh"
+
+function select_pane_local() {
+  local dir offset pane
+
+  dir="$1" && shift
+  read pane offset <<< $(find_pane "$dir")
+  if [[ "$pane" ]]; then
+    if requires_remote_delay $pane; then
+      "$SCRIPTS_DIR/navigate" "remote" $dir $pane $offset
+    else
+      log_trace "Selecting pane $pane"
+      tmux select-pane -t $pane
+    fi
+  fi
+}
+
+function select_pane_remote() {
+  local dir offset params pane
+
+  read pane offset <<< $(find_pane ${params[*]} "$@")
+  if [[ "$pane" ]]; then
+    log_trace "Selecting pane $pane"
+    tmux select-pane -t $pane
+  fi
+}
+
+function find_pane() {
+  local axis
+  local edge edge2 edge_func edge2_func lower pane pos upper
+  log_trace "Incoming parameters: $@"
+
+  dir="$1" && shift
+  log_info "Finding pane in direction: $dir"
+
+  case $dir in
+    L) find_params=("left" "right" "top" "bottom" "y") ;;
+    R) find_params=("right" "left" "top" "bottom" "y") ;;
+    U) find_params=("top" "bottom" "left" "right" "x") ;;
+    D) find_params=("bottom" "top" "left" "right" "x") ;;
+  esac
+
+  axis=${find_params[4]}
+  if [[ "$1" ]]; then
+    pos=$1
+    edge_func="window_${find_params[1]}"
+    log_trace "Using position along $edge_func: $pos"
+  else
+    pane=$(pane_index)
+    edge_func="pane_${find_params[0]}"
+    pos=$(($(pane_${find_params[2]}) + $(pane_cursor_$axis)))
+    log_trace "Using position along ${axis} axis: $pos"
+  fi
+
+  edge=$($edge_func)
+  edge2_func="pane_${find_params[1]}"
+
+  panes=("$(tmux list-panes -F '#{pane_index}')")
+  for p in ${panes[@]}; do
+    [[ "$pane" ]] && [[ $p -eq $pane ]] && continue
+
+    log_trace "Checking pane $p"
+    edge2="$($edge2_func $p)"
+    log_trace "Checking adjoining edges $edge_func($pane): $edge, $edge2_func($p): $edge2"
+    [[ $(abs $(($edge - $edge2))) -gt 2 ]] && continue
+
+    lower="$(pane_${find_params[2]} $p)"
+    upper="$(pane_${find_params[3]} $p)"
+
+    log_trace "Checking if $axis=$pos between ${find_params[2]}: $lower, ${find_params[3]}: $upper"
+    if [[ $pos -ge $(($lower - 1)) ]] && [[ $pos -le $(($upper + 1)) ]]; then
+      log_debug "Found pane $p"
+      echo "$p $(($pos - $lower))"
+      break
+    fi
+  done
+}
+
+function execute_cmd() {
+  local cmd
+
+  cmd="$1" && shift
+  log_debug "Executing selection cmd: $cmd"
+
+  case $cmd in
+    local)
+      select_pane_local "$@"
+      ;;
+    remote)
+      select_pane_remote "$@"
+      ;;
+  esac
+}
+
+execute_cmd "$@"

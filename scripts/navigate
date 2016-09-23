@@ -1,39 +1,108 @@
 #!/usr/bin/env bash
 
 CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPTS_DIR="$CURRENT_DIR"
 HELPERS_DIR="$CURRENT_DIR/helpers"
 
-source "$HELPERS_DIR/direction_utils.sh"
+source "$HELPERS_DIR/format_utils.sh"
+source "$HELPERS_DIR/logging_utils.sh"
 source "$HELPERS_DIR/ps_utils.sh"
+source "$HELPERS_DIR/tmux_utils.sh"
+source "$HELPERS_DIR/utils.sh"
 
-function get_cursor_pos() {
-  local left top x y
-  IFS=',' read left top x y <<< \
-    $(tmux display-message -p "#{pane_left},#{pane_topupper},#{cursor_x},#{cursor_y}")
-  echo "$(($left + $x)),$(($top + $y))"
+function execute_cmd() {
+  local cmd
+
+  cmd="$1"
+  shift
+
+  log_debug "Executing navigation cmd: $cmd"
+  log_debug "Current navigation state: $(navigation_state), key-table: $(client_key_table)"
+
+  case $cmd in
+    local)
+      navigate_local "$@"
+      ;;
+    remote)
+      navigate_remote "$@"
+      ;;
+  esac
 }
 
-function navigation_delay() {
-  tmux show-options -gv @navigation-delay 2> /dev/null || return 0.1
-}
+function navigate_local() {
+  local after cursor dir key 
+  dir="$1"
+  key="$(select_key $dir)"
+  ekey="$(select_key $dir "editor")"
 
-function main() {
-  local cursor dir key
+  log_info "Navigating from pane $(pane_index)"
+  cursor="$(window_cursor_pos)"
+  after=$cursor
 
-  key="$1"
-  dir="$2"
+  if requires_delay; then
+    if requires_remote_delay; then
+      send_keys C-s
+    else
+      send_keys $key
+    fi
 
-  cursor="$(get_cursor_pos)"
-  if is_running_tmux || is_running_editor || is_running_remote; then
-    tmux send-keys C-$key
-    if is_running_editor || is_running_remote; then
-      sleep $(navigation_delay)
+    after=$(issue_delay)
+  fi
+
+  if can_select_pane $dir && [[ "$cursor" == "$after" ]]; then
+    if requires_remote_delay; then
+      send_keys C-q
+    fi
+
+    "$SCRIPTS_DIR/select_pane" "local" $dir
+  elif requires_remote_delay; then
+    if [[ "$cursor" == "$after" ]]; then
+      "$SCRIPTS_DIR/select_pane" "local" $dir
+    else
+      log_trace "Cursor before: $cursor, after: $after"
+
+      # First try to navigate assuming the remote pane running an editor.
+      send_keys $ekey
+
+      # If the cursor has not changed then see if it can move to another remote pane
+      if [[ "$cursor" == "$(issue_delay)" ]]; then
+        send_keys $pane $offset $key
+      fi
+
+      if can_select_pane $dir && [[ "$cursor" == "$(issue_delay)" ]]; then
+        "$SCRIPTS_DIR/select_pane" "local" $dir
+      fi
     fi
   fi
-
-  if can_select_pane $dir && [[ "$cursor" == "$(get_cursor_pos)" ]]; then
-    select_pane $dir
-  fi
 }
 
-main "$@"
+function navigate_remote() {
+  local cursor dir ekey offset pane
+
+  dir="$1"
+  key="$(select_key $dir)"
+  ekey="$(select_key $dir "editor")"
+  pane="$2"
+  offset="$3"
+
+  log_info "Navigating to pane $pane"
+  cursor="$(window_cursor_pos $pane)"
+  send_keys -t $pane C-s
+  after=$(issue_delay $pane)
+
+  log_trace "Cursor before: $cursor, after: $after"
+  if [[ "$cursor" == "$after" ]]; then
+    send_keys -t $pane C-q
+  else
+    send_keys -t $pane $offset $key
+
+    # Delay after issuing movement command to the remote pane so that the
+    # movement will have completed before entering the pane. This prevents the
+    # cursor jumping after entering the pane.
+    $(issue_delay)
+  fi
+
+  tmux select-pane -t $pane
+}
+
+execute_cmd "$@"
