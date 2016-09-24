@@ -99,7 +99,7 @@ function navigate_remote() {
     # Delay after issuing movement command to the remote pane so that the
     # movement will have completed before entering the pane. This prevents the
     # cursor jumping after entering the pane.
-    $(issue_delay)
+    $(issue_delay $pane)
   fi
 
   tmux select-pane -t $pane

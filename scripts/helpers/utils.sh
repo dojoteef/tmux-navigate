@@ -11,6 +11,9 @@ SCRIPTS_DIR="$CURRENT_DIR/.."
 EDITOR_NAVIGATION_PREFIX=""
 DEFAULT_NAVIGATION_PREFIX="C-"
 
+DEFAULT_LOCAL_DELAY=0.15
+DEFAULT_REMOTE_DELAY=0.3
+
 source "$HELPERS_DIR/logging_utils.sh"
 source "$HELPERS_DIR/format_utils.sh"
 
@@ -35,14 +38,22 @@ function navigation_mode() {
 }
 
 function issue_delay() {
-  local delay pane
+  local default delay option pane
 
-  pane=$1
-  delay=$(tmux show-options -gv @navigation-delay 2> /dev/null || return 0.1)
+  pane=${1-$(pane_index)}
 
+  if requires_remote_delay $pane; then
+    option="@navigation-remote-delay"
+    default=$DEFAULT_REMOTE_DELAY
+  else
+    option="@navigation-local-delay"
+    default=$DEFAULT_LOCAL_DELAY
+  fi
+
+  delay=$(tmux show-options -gv $option 2> /dev/null || return $default)
   log_trace "Sleeping $delay"
-  sleep $delay
 
+  sleep $delay
   window_cursor_pos $pane
 }
 
