@@ -36,7 +36,7 @@ Installation
 
 #### TPM
 
-Use the Tmux Plugin Manager ([TPM][]) to easily install:
+Use the Tmux Plugin Manager ([TPM](https://github.com/tmux-plugins/tpm)) to easily install:
 Simply add the following lines to your ~/.tmux.conf:
 
 ``` tmux
