@@ -1,4 +1,5 @@
-if [ $SOURCED_FORMAT_UTILS ]; then
+# shellcheck shell=bash
+if [ "$SOURCED_FORMAT_UTILS" ]; then
   return
 fi
 
@@ -7,6 +8,11 @@ SOURCED_FORMAT_UTILS=1
 function client_key_table() {
   local target="$1"
   tmux display-message -t "$target" -p "#{client_key_table}"
+}
+
+function client_tty() {
+  local target="$1"
+  tmux display-message -t "$target" -p "#{client_tty}"
 }
 
 function pane_index() {
@@ -60,7 +66,7 @@ function pane_cursor_y() {
 }
 
 function pane_cursor_pos() {
-  echo "$(pane_cursor_x $target),$(pane_cursor_y $target)"
+  echo "$(pane_cursor_x "$target"),$(pane_cursor_y "$target")"
 }
 
 function window_top() {
@@ -68,7 +74,7 @@ function window_top() {
 }
 
 function window_bottom() {
-  echo $(($(window_height) - 1))
+  echo $(($(window_height "$@") - 1))
 }
 
 function window_left() {
@@ -76,7 +82,7 @@ function window_left() {
 }
 
 function window_right() {
-  echo $(($(window_width) - 1))
+  echo $(($(window_width "$@") - 1))
 }
 
 function window_height() {
@@ -93,23 +99,23 @@ function window_cursor_x() {
   local left target x
   target="$1"
 
-  left="$(pane_left $target)"
-  x="$(pane_cursor_x $target)"
+  left="$(pane_left "$target")"
+  x="$(pane_cursor_x "$target")"
 
-  echo "$(($left + $x))"
+  echo "$((left + x))"
 }
 
 function window_cursor_y() {
   local target top y
   target="$1"
 
-  top="$(pane_top $target)"
-  y="$(pane_cursor_y $target)"
+  top="$(pane_top "$target")"
+  y="$(pane_cursor_y "$target")"
 
-  echo "$(($top + $y))"
+  echo "$((top + y))"
 }
 
 function window_cursor_pos() {
   local target="$1"
-  echo "$(window_cursor_x $target),$(window_cursor_y $target)"
+  echo "$(window_cursor_x "$target"),$(window_cursor_y "$target")"
 }

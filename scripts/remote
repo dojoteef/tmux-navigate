@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
 CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-SCRIPTS_DIR="$CURRENT_DIR"
-HELPERS_DIR="$SCRIPTS_DIR/helpers"
+HELPERS_DIR="$CURRENT_DIR/helpers"
 
 source "$HELPERS_DIR/logging_utils.sh"
 source "$HELPERS_DIR/ps_utils.sh"
@@ -11,7 +10,7 @@ source "$HELPERS_DIR/utils.sh"
 
 function set_navigation_state() {
   local next_state="$1"
-  if [[ "$navigation_state" == "$next_state" ]]; then
+  if [[ "$(navigation_state)" == "$next_state" ]]; then
     return
   fi
 
@@ -33,23 +32,27 @@ function set_navigation_state() {
 }
 
 function save_state() {
-  local paste_time=$(tmux show-options -gqv assume-paste-time)
+  local paste_time
+  paste_time=$(tmux show-options -gqv assume-paste-time)
+
   if [[ "$paste_time" ]]; then
     log_debug "Saving remote state"
     tmux set-option -gq @navigation-paste-time "$paste_time"
     tmux set-option -gq assume-paste-time 0
-    "$SCRIPTS_DIR/ttycmd" decsc
+    call ttycmd decsc
   fi
 }
 
 function restore_state() {
-  local paste_time=$(tmux show-options -gqv @navigation-paste-time)
+  local paste_time
+  paste_time=$(tmux show-options -gqv @navigation-paste-time)
+
   if [[ "$paste_time" ]]; then
     log_debug "Restoring remote state"
-    tmux set-option -gq assume-paste-time $paste_time
+    tmux set-option -gq assume-paste-time "$paste_time"
     tmux set-option -gq @navigation-paste-time ""
     tmux set-option -gq @navigation-offset ""
-    "$SCRIPTS_DIR/ttycmd" decrc
+    call ttycmd decrc
   fi
 }
 
@@ -58,12 +61,12 @@ function cursor_move() {
   x=$(pane_cursor_x)
   width=$(pane_width)
 
-  if [[ $(($x + 1)) -eq $width ]]; then
+  if [[ $((x + 1)) -eq $width ]]; then
     log_debug "Moving cursor backward"
-    "$SCRIPTS_DIR/ttycmd" cub
+    call ttycmd cub
   else
     log_debug "Moving cursor forward"
-    "$SCRIPTS_DIR/ttycmd" cuf
+    call ttycmd cuf
   fi
 }
 
@@ -76,7 +79,7 @@ function update_offset() {
 }
 
 function execute_cmd() {
-  local after cmd cursor offset
+  local cmd cursor
 
   cmd="$1"
   shift
@@ -92,7 +95,7 @@ function execute_cmd() {
       ;;
     receive)
       if [[ "$(navigation_state)" == "navigating" ]]; then
-        update_offset $1
+        update_offset "$1"
       fi
       ;;
     reset)
@@ -110,7 +113,7 @@ function execute_cmd() {
         restore_state
         if is_running_editor; then
           cursor=$(window_cursor_pos)
-          send_keys $(select_key $1)
+          send_keys "$(select_key "$1")"
 
           if [[ "$cursor" != "$(issue_delay)" ]]; then
             set_navigation_state "idle"
@@ -120,12 +123,15 @@ function execute_cmd() {
       ;;
     navigate)
       if [[ "$(navigation_state)" == "navigating" ]]; then
-        "$SCRIPTS_DIR/select_pane" remote $1 $(offset)
+        call select_pane remote "$1" "$(offset)"
         restore_state
         set_navigation_state "idle"
       fi
       ;;
   esac
 }
+
+trap 'errexit' ERR
+set -o errtrace
 
 execute_cmd "$@"

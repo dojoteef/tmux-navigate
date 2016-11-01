@@ -1,4 +1,5 @@
-if [ $SOURCED_PS_UTILS ]; then
+# shellcheck shell=bash
+if [ "$SOURCED_PS_UTILS" ]; then
   return
 fi
 
@@ -13,8 +14,9 @@ function is_running() {
   local regex tty
 
   regex=$1
-  tty=$(pane_tty $2)
+  tty=$(pane_tty "$2")
 
+  # shellcheck disable=SC2009
   ps -o stat= -o comm= -t "$tty" | \
     grep -iE "^[^TXZ ]+ +(\\S+\\/)?$regex$" &> /dev/null
 }

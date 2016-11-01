@@ -1,4 +1,5 @@
-if [ $SOURCED_TMUX_UTILS ]; then
+# shellcheck shell=bash
+if [ "$SOURCED_TMUX_UTILS" ]; then
   return
 fi
 
@@ -10,6 +11,6 @@ HELPERS_DIR="$CURRENT_DIR"
 source "$HELPERS_DIR/logging_utils.sh"
 
 function send_keys() {
-  log_trace "Send keys \"$@\" called from $(log_caller $(caller 0))"
+  log_trace "Send keys \"$*\""
   tmux send-keys "$@"
 }

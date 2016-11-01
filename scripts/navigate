@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-SCRIPTS_DIR="$CURRENT_DIR"
 HELPERS_DIR="$CURRENT_DIR/helpers"
 
 source "$HELPERS_DIR/format_utils.sh"
@@ -32,8 +31,8 @@ function execute_cmd() {
 function navigate_local() {
   local after cursor dir key 
   dir="$1"
-  key="$(select_key $dir)"
-  ekey="$(select_key $dir "editor")"
+  key="$(select_key "$dir")"
+  ekey="$(select_key "$dir" "editor")"
 
   log_info "Navigating from pane $(pane_index)"
   cursor="$(window_cursor_pos)"
@@ -43,34 +42,34 @@ function navigate_local() {
     if requires_remote_delay; then
       send_keys C-s
     else
-      send_keys $key
+      send_keys "$key"
     fi
 
     after=$(issue_delay)
   fi
 
-  if can_select_pane $dir && [[ "$cursor" == "$after" ]]; then
+  if can_select_pane "$dir" && [[ "$cursor" == "$after" ]]; then
     if requires_remote_delay; then
       send_keys C-q
     fi
 
-    "$SCRIPTS_DIR/select_pane" "local" $dir
+    call select_pane local "$dir"
   elif requires_remote_delay; then
     if [[ "$cursor" == "$after" ]]; then
-      "$SCRIPTS_DIR/select_pane" "local" $dir
+      call select_pane local "$dir"
     else
       log_trace "Cursor before: $cursor, after: $after"
 
       # First try to navigate assuming the remote pane running an editor.
-      send_keys $ekey
+      send_keys "$ekey"
 
       # If the cursor has not changed then see if it can move to another remote pane
       if [[ "$cursor" == "$(issue_delay)" ]]; then
-        send_keys $pane $offset $key
+        send_keys "$pane" "$offset" "$key"
       fi
 
-      if can_select_pane $dir && [[ "$cursor" == "$(issue_delay)" ]]; then
-        "$SCRIPTS_DIR/select_pane" "local" $dir
+      if can_select_pane "$dir" && [[ "$cursor" == "$(issue_delay)" ]]; then
+        call select_pane local "$dir"
       fi
     fi
   fi
@@ -80,29 +79,32 @@ function navigate_remote() {
   local cursor dir ekey offset pane
 
   dir="$1"
-  key="$(select_key $dir)"
-  ekey="$(select_key $dir "editor")"
+  key="$(select_key "$dir")"
+  ekey="$(select_key "$dir" "editor")"
   pane="$2"
   offset="$3"
 
   log_info "Navigating to pane $pane"
-  cursor="$(window_cursor_pos $pane)"
-  send_keys -t $pane C-s
-  after=$(issue_delay $pane)
+  cursor="$(window_cursor_pos "$pane")"
+  send_keys -t "$pane" C-s
+  after=$(issue_delay "$pane")
 
   log_trace "Cursor before: $cursor, after: $after"
   if [[ "$cursor" == "$after" ]]; then
-    send_keys -t $pane C-q
+    send_keys -t "$pane" C-q
   else
-    send_keys -t $pane $offset $key
+    send_keys -t "$pane" "$offset" "$key"
 
     # Delay after issuing movement command to the remote pane so that the
     # movement will have completed before entering the pane. This prevents the
     # cursor jumping after entering the pane.
-    $(issue_delay $pane)
+    issue_delay "$pane" > /dev/null
   fi
 
-  tmux select-pane -t $pane
+  tmux select-pane -t "$pane"
 }
+
+trap 'errexit' ERR
+set -o errtrace
 
 execute_cmd "$@"

@@ -16,7 +16,7 @@ function navigation_setup() {
   tmux bind-key -r -Tnavigation C-q run-shell "$REMOTE reset"
 
   for i in $(seq 0 9); do
-    tmux bind-key -r -Tnavigation $i run-shell "$REMOTE receive $i"
+    tmux bind-key -r -Tnavigation "$i" run-shell "$REMOTE receive $i"
   done
 }
 
@@ -24,12 +24,12 @@ function navigation_setup_key() {
   local dir ekey key
 
   dir="$1"
-  key="$(select_key $dir)"
-  ekey="$(select_key $dir "editor")"
+  key="$(select_key "$dir")"
+  ekey="$(select_key "$dir" "editor")"
 
-  tmux bind-key -n $key run-shell "$NAVIGATE local $dir"
-  tmux bind-key -r -Tnavigation $key run-shell "$REMOTE navigate $dir"
-  tmux bind-key -r -Tnavigation $ekey run-shell "$REMOTE navigate-editor $dir"
+  tmux bind-key -n "$key" run-shell "$NAVIGATE local $dir"
+  tmux bind-key -r -Tnavigation "$key" run-shell "$REMOTE navigate $dir"
+  tmux bind-key -r -Tnavigation "$ekey" run-shell "$REMOTE navigate-editor $dir"
 }
 
 navigation_setup
